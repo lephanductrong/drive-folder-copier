@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drive Folder Copier</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+      color: #f8fafc;
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+    }
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    .input-field {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255,255,255,0.2);
+      transition: all 0.3s ease;
+    }
+    .input-field:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+      outline: none;
+    }
+    .animated-bg {
+      background-size: 200% 200%;
+      animation: gradientBG 5s ease infinite;
+    }
+    @keyframes gradientBG {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    
+    /* Progress Bar */
+    .progress-bar-wrap {
+      width: 100%;
+      background-color: rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      overflow: hidden;
+      height: 12px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #6366f1, #a855f7);
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.4); }
+  </style>
+</head>
+<body class="flex items-center justify-center p-6">
+
+  <div class="glass-panel p-8 rounded-2xl w-full max-w-2xl relative overflow-hidden">
+    <!-- Decorative blob -->
+    <div class="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-indigo-500 opacity-20 blur-[80px]"></div>
+    <div class="absolute bottom-0 left-0 -ml-16 -mb-16 w-64 h-64 rounded-full bg-purple-500 opacity-20 blur-[80px]"></div>
+
+    <div class="relative z-10">
+      <h1 class="text-3xl font-extrabold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">
+        Drive Copier
+      </h1>
+      <p class="text-slate-300 text-sm mb-8">
+        Seamlessly clone entire Google Drive folders without timeouts.
+      </p>
+
+      <div class="space-y-5">
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-1">Source Folder Link <span class="text-red-400">*</span></label>
+          <input type="text" id="sourceUrl" class="input-field w-full px-4 py-3 rounded-lg text-slate-100 placeholder-slate-500" placeholder="https://drive.google.com/drive/folders/1aBcD...">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-1">Destination Location Link (Optional)</label>
+          <input type="text" id="destUrl" class="input-field w-full px-4 py-3 rounded-lg text-slate-100 placeholder-slate-500" placeholder="Leave empty to copy to My Drive">
+          <p class="text-xs text-slate-400 mt-2">If provided, the folder will be cloned into this target location.</p>
+        </div>
+
+        <button id="startBtn" onclick="startCopy()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-4 rounded-lg shadow-lg hover:shadow-indigo-500/30 transition-all duration-300 relative overflow-hidden">
+          <span class="relative z-10 flex items-center justify-center">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path></svg>
+            Start Duplication
+          </span>
+        </button>
+      </div>
+
+      <!-- Processing Area -->
+      <div id="processingArea" class="mt-8 hidden space-y-4 border-t border-slate-700/50 pt-6">
+        <div class="flex justify-between text-sm font-medium">
+          <span id="statusText" class="text-indigo-300">Initializing...</span>
+          <span id="progressText" class="text-slate-400">0%</span>
+        </div>
+        
+        <div class="progress-bar-wrap">
+          <div id="progressBar" class="progress-bar-fill"></div>
+        </div>
+
+        <div id="logArea" class="bg-slate-900/50 rounded-lg p-3 h-32 overflow-y-auto text-xs text-slate-400 font-mono space-y-1 mt-4">
+          <!-- Logs go here -->
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const CHUNK_SIZE = 100;
+
+    function runServer(funcName, ...args) {
+      return new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          [funcName](...args);
+      });
+    }
+
+    function extractIdFromUrl(url) {
+      if (!url) return null;
+      var idMatch = url.match(/[-\w]{25,}/);
+      return idMatch ? idMatch[0] : null;
+    }
+
+    function addLog(msg, type="info") {
+      const area = document.getElementById('logArea');
+      const div = document.createElement('div');
+      
+      const time = new Date().toLocaleTimeString();
+      let colorClass = "text-slate-400";
+      if(type === "error") colorClass = "text-red-400";
+      if(type === "success") colorClass = "text-green-400";
+      
+      div.className = colorClass;
+      div.innerText = `[${time}] ${msg}`;
+      area.appendChild(div);
+      area.scrollTop = area.scrollHeight;
+    }
+
+    function updateProgress(percent, text) {
+      document.getElementById('progressBar').style.width = percent + '%';
+      if(text) {
+        document.getElementById('statusText').innerText = text;
+      }
+      document.getElementById('progressText').innerText = Math.round(percent) + '%';
+    }
+
+    async function startCopy() {
+      const sourceUrl = document.getElementById('sourceUrl').value.trim();
+      const destUrl = document.getElementById('destUrl').value.trim();
+
+      if(!sourceUrl) {
+        alert("Please enter a valid Source Folder Link.");
+        return;
+      }
+
+      const sourceId = extractIdFromUrl(sourceUrl);
+      if(!sourceId) {
+        alert("Could not extract Folder ID from the source link.");
+        return;
+      }
+
+      const destParentId = destUrl ? extractIdFromUrl(destUrl) : null;
+
+      // UI Update
+      document.getElementById('startBtn').disabled = true;
+      document.getElementById('startBtn').classList.add('opacity-50', 'cursor-not-allowed');
+      document.getElementById('processingArea').classList.remove('hidden');
+      document.getElementById('logArea').innerHTML = '';
+      
+      addLog("Started process. Logging request...", "info");
+      
+      try {
+        // Step 1: Log to sheet
+        await runServer('logToSheet', sourceUrl);
+        addLog("Request logged to Google Sheet.", "success");
+
+        // Step 2: Get initial source folder info
+        updateProgress(5, "Analyzing source folder...");
+        let sourceInfo = await runServer('getFolderContentsInfo', sourceId);
+        if(!sourceInfo.success) throw new Error(sourceInfo.error);
+
+        // Step 3: Create mapping and traverse
+        addLog(`Found root folder: "${sourceInfo.name}". Creating target structure...`, "info");
+        
+        let rootTarget = await runServer('createTargetFolder', sourceInfo.name, destParentId);
+        if(!rootTarget.success) throw new Error(rootTarget.error);
+
+        addLog(`Created root target folder (ID: ${rootTarget.id})`, "info");
+
+        // Queues
+        let queue = [
+          { 
+            sourceId: sourceId, 
+            targetId: rootTarget.id,
+            preFetchedInfo: sourceInfo // Save a network call
+          }
+        ];
+        
+        // This array will hold everything we need to copy
+        let filesToCopy = [];
+        
+        // BFS traversal
+        let foldersProcessed = 0;
+        while(queue.length > 0) {
+          let current = queue.shift();
+          
+          let contents;
+          if(current.preFetchedInfo) {
+            contents = current.preFetchedInfo;
+          } else {
+             updateProgress(10, `Reading folder structure (${foldersProcessed} scanned)...`);
+             contents = await runServer('getFolderContentsInfo', current.sourceId);
+             if(!contents.success) addLog(`Failed to read folder ${current.sourceId}: ${contents.error}`, "error");
+          }
+
+          if(contents && contents.success) {
+            // Queue files for copying
+            for(let f of contents.files) {
+              filesToCopy.push({
+                fileId: f.id,
+                targetFolderId: current.targetId
+              });
+            }
+
+            // Create target folders immediately and add to queue
+            for(let sub of contents.folders) {
+              let newTarget = await runServer('createTargetFolder', sub.name, current.targetId);
+              if(newTarget.success) {
+                queue.push({
+                  sourceId: sub.id,
+                  targetId: newTarget.id
+                });
+              } else {
+                addLog(`Failed to create subfolder ${sub.name}: ${newTarget.error}`, "error");
+              }
+            }
+          }
+          foldersProcessed++;
+        }
+
+        addLog(`Traversal complete. Found ${filesToCopy.length} files to copy across ${foldersProcessed} folders.`, "success");
+
+        // Step 4: Process files in chunks
+        let totalFiles = filesToCopy.length;
+        if(totalFiles === 0) {
+          updateProgress(100, "Done (No files found)");
+          addLog("Process finished. The folder was empty.", "success");
+          return;
+        }
+
+        let copiedFiles = 0;
+        
+        for(let i = 0; i < totalFiles; i += CHUNK_SIZE) {
+          let chunk = filesToCopy.slice(i, i + CHUNK_SIZE);
+          let percent = 20 + ((i / totalFiles) * 80);
+          updateProgress(percent, `Copying files (${i}/${totalFiles})...`);
+          addLog(`Copying chunk of ${chunk.length} files...`, "info");
+          
+          let res = await runServer('copyFilesBatch', chunk);
+          if(!res.success) {
+            addLog(`Error copying batch: ${res.error}`, "error");
+          } else {
+            // Check individual results if needed
+            let successCount = res.results.filter(r => r.success).length;
+            copiedFiles += successCount;
+            addLog(`Successfully copied ${successCount}/${chunk.length} files in this batch.`, "info");
+          }
+        }
+
+        updateProgress(100, "Completed Successfully!");
+        addLog(`Finished! Copied ${copiedFiles} files.`, "success");
+
+      } catch (err) {
+        addLog(`Critical Error: ${err.message}`, "error");
+        updateProgress(100, "Process failed.");
+        document.getElementById('progressBar').style.background = "#ef4444";
+      } finally {
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('startBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    }
+  </script>
+</body>
+</html>
