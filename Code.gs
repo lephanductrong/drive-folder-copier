@@ -13,16 +13,7 @@ function extractIdFromUrl(url) {
 }
 
 function logToSheet(sourceUrl) {
-  try {
-    var sheet = SpreadsheetApp.openById('1krXhn2PBWwT1U4wq3t1HbDb9ZmImjlGJLM6U33bSezU').getSheets()[0];
-    var email = Session.getActiveUser().getEmail();
-    var timestamp = new Date();
-    sheet.appendRow([timestamp, email, sourceUrl]);
-    return { success: true };
-  } catch (e) {
-    // If the user doesn't have permission to write to this sheet, we don't want to break the whole app unless it's strictly required
-    return { success: false, error: e.toString() };
-  }
+  return false;
 }
 
 function getFolderContentsInfo(folderId) {
