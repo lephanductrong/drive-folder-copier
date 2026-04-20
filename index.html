@@ -300,9 +300,7 @@
       addLog("Started process. Logging request...", "info");
       
       try {
-        // Step 1: Log to sheet
-        await runServer('logToSheet', sourceUrl);
-        addLog("Request logged to Google Sheet.", "success");
+       
 
         // Step 2: Get initial source folder info
         updateProgress(5, "Analyzing source folder...");
